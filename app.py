@@ -10,40 +10,45 @@ st.title("🇨🇭 Planificador Financiero Familiar")
 st.markdown("Simulador de Jubilación, Estrategia de Escudos y Protección Familiar.")
 
 # --- 1. DATOS FIJOS ---
-# Actualizado con extracto PK del 19.02.2026 (Ref. 28.02.2026)
 EDAD_ACTUAL = 43
 EDAD_RETIRO = 65
 EDAD_FINAL = 120
+SALDO_PK_ACTUAL = 152030  # Extracto PK 28.02.2026
 
-# PK DATOS — Fuente: Portal Simulation 28.02.2026 + Benefits Statement
-# Nota: renta_viuda/huerfano/capital_muerte son pre-jubilación (basados en pensión invalidez),
-#       idénticos para todos los niveles ya que dependen del salario asegurado, no del plan.
-DATOS_PK = {
-    'Standard': {
-        'capital_meta': 831603, 'renta': 42024, 'costo_mensual': 681.10,
-        'renta_viuda': 35424, 'renta_huerfano': 11808, 'capital_muerte': 188492
-    },
-    'Medium': {
-        'capital_meta': 913174, 'renta': 46260, 'costo_mensual': 953.80,
-        'renta_viuda': 35424, 'renta_huerfano': 11808, 'capital_muerte': 188492
-    },
-    'Plus': {
-        'capital_meta': 994745, 'renta': 50508, 'costo_mensual': 1226.50,
-        'renta_viuda': 35424, 'renta_huerfano': 11808, 'capital_muerte': 188492
-    }
+# Tasas contribución EE por nivel (% del salario asegurado)
+TASAS_EE = {
+    'Standard': {'E1_ahorro': 3.70, 'E1_riesgo': 1.00, 'E2_ahorro': 4.40, 'E2_riesgo': 1.60, 'CSP': 1.00},
+    'Medium':   {'E1_ahorro': 6.00, 'E1_riesgo': 1.00, 'E2_ahorro': 6.70, 'E2_riesgo': 1.60, 'CSP': 1.00},
+    'Plus':     {'E1_ahorro': 8.30, 'E1_riesgo': 1.00, 'E2_ahorro': 9.00, 'E2_riesgo': 1.60, 'CSP': 1.00},
 }
+
+# Capital meta y renta del Portal Simulation 28.02.2026 (salario ref 142'271)
+CAPITAL_META_REF = {'Standard': 831603, 'Medium': 913174, 'Plus': 994745}
+RENTA_REF = {'Standard': 42024, 'Medium': 46260, 'Plus': 50508}
+SALARIO_REF = 142271
+
+# Prestaciones fallecimiento/invalidez (dependen del salario, no del nivel)
+RENTA_VIUDA_REF = 35424
+RENTA_HUERFANO_REF = 11808
+CAPITAL_MUERTE_REF = 188492
 
 # VIAC
 APORTE_ANUAL_3A = 7056
-CAPITAL_3A_ACTUAL = 3 * APORTE_ANUAL_3A # Aprox 21k
-SALDO_PK_ACTUAL = 152030  # Extracto PK 28.02.2026
+CAPITAL_3A_ACTUAL = 3 * APORTE_ANUAL_3A
 
-# --- SIDEBAR (CONTROLES) ---
+# --- SIDEBAR ---
 st.sidebar.header("⚙️ Configuración")
 
-gastos_mensuales = st.sidebar.slider('🛒 Gastos Hoy (CHF/mes)', 4000, 12000, 6700, 100)
+st.sidebar.subheader("💰 Salario y PK")
+salario = st.sidebar.number_input('Salario Bruto Anual (CHF)', 80000, 300000, SALARIO_REF, 1000)
+tope_e1 = st.sidebar.number_input('Tope Salario E1 (CHF)', 50000, 200000, 120960, 100)
 nivel_pk = st.sidebar.selectbox('🏢 Nivel PK Empresa', ['Standard', 'Medium', 'Plus'], index=0)
-aporte_etf = st.sidebar.slider('🚀 Aporte ETF Privado (CHF/mes)', 0, 5000, 1650, 50)
+gastos_mensuales = st.sidebar.slider('🛒 Gastos Hoy (CHF/mes)', 4000, 12000, 6700, 100)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("🚀 Inversión Privada")
+aporte_etf = st.sidebar.slider('Aporte Total Privado (CHF/mes)', 0, 5000, 1650, 50)
+pct_oro = st.sidebar.slider('🥇 % Asignación a Oro', 0, 100, 0, 5)
 estrategia_retiro = st.sidebar.selectbox('🏦 Estrategia Retiro PK', ['100% Renta', 'Mixto 50/50', '100% Capital'], index=2)
 
 st.sidebar.markdown("---")
@@ -54,10 +59,40 @@ edad_herencia = st.sidebar.slider('⚰️ Edad Cálculo Herencia', 66, 110, 85, 
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📊 Rentabilidades")
-r_acum = st.sidebar.slider('Pre-Jubilación (Acumulación) %', 1.0, 10.0, 6.8, 0.1)
-r_retiro = st.sidebar.slider('Post-Jubilación (VT/Acciones) %', 0.0, 8.0, 4.0, 0.1)
+r_acum = st.sidebar.slider('Pre-Jubilación (VT Acumulación) %', 1.0, 10.0, 6.8, 0.1)
+r_oro_slider = st.sidebar.slider('Oro (Pre-Jubilación) %', 0.0, 10.0, 4.0, 0.1)
+r_retiro = st.sidebar.slider('Post-Jubilación (VT) %', 0.0, 8.0, 4.0, 0.1)
+r_oro_retiro = st.sidebar.slider('Post-Jubilación (Oro) %', 0.0, 8.0, 3.0, 0.1)
 r_bonos = st.sidebar.slider('Post-Jubilación (Bonos) %', 0.0, 5.0, 1.5, 0.1)
 tax = st.sidebar.slider('Impuesto Retiro Capital %', 0.0, 15.0, 8.0, 0.5)
+
+
+# --- CÁLCULOS SALARIO / CONTRIBUCIONES ---
+e1_salary = min(salario, tope_e1)
+e2_salary = max(0, salario - tope_e1)
+factor_salario = salario / SALARIO_REF
+
+def calc_contribuciones_ee(e1, e2, tasas):
+    e1_total_pct = tasas['E1_ahorro'] + tasas['E1_riesgo']
+    e2_total_pct = tasas['E2_ahorro'] + tasas['E2_riesgo']
+    csp_pct = tasas['CSP']
+    ee_e1 = e1 * e1_total_pct / 100 / 12
+    ee_e2 = e2 * e2_total_pct / 100 / 12
+    ee_csp = e1 * csp_pct / 100 / 12
+    return ee_e1, ee_e2, ee_csp, ee_e1 + ee_e2 + ee_csp
+
+contribuciones = {}
+for niv in ['Standard', 'Medium', 'Plus']:
+    ee_e1, ee_e2, ee_csp, total = calc_contribuciones_ee(e1_salary, e2_salary, TASAS_EE[niv])
+    contribuciones[niv] = {'E1': ee_e1, 'E2': ee_e2, 'CSP': ee_csp, 'Total': total}
+
+# Escalar proyecciones PK con el salario
+pk_capital_meta = {niv: CAPITAL_META_REF[niv] * factor_salario for niv in CAPITAL_META_REF}
+pk_renta = {niv: RENTA_REF[niv] * factor_salario for niv in RENTA_REF}
+
+renta_viuda = RENTA_VIUDA_REF * factor_salario
+renta_huerfano = RENTA_HUERFANO_REF * factor_salario
+capital_muerte = CAPITAL_MUERTE_REF * factor_salario
 
 
 # --- LÓGICA ---
@@ -67,50 +102,52 @@ def calcular_deficit_futuro(edad_actual, gastos_base, ahv_base, renta_pk, inflac
         anos_desde_hoy = (edad_actual + i) - EDAD_ACTUAL
         factor = (1 + inflacion)**anos_desde_hoy
         gasto = (gastos_base * 12) * factor
-        # AVS Escalera
         pasos_bianuales = (anos_desde_hoy // 2) * 2
         factor_avs = (1 + inflacion)**pasos_bianuales
         ahv = ahv_base * factor_avs
-        
         ingreso = ahv + renta_pk
         deficit_anual = gasto - ingreso
         if deficit_anual > 0:
             deficit_total += deficit_anual
     return deficit_total
 
+
 # --- EJECUCIÓN ---
-# Conversiones
 inf_rate = inflacion_pct / 100
 r_acum_anual = r_acum / 100
+r_oro_anual = r_oro_slider / 100
 r_ret_anual = r_retiro / 100
+r_oro_ret_anual = r_oro_retiro / 100
 r_bonos_anual = r_bonos / 100
 tax_rate = tax / 100
 
-# Datos Base
 ahv_pareja_anual_base = ahv_pareja_proyectado * 12
 ahv_individual_base = ahv_pareja_proyectado / 2.0
-ahv_viuda_mes = ahv_individual_base * 0.80
-ahv_huerfano_mes = ahv_individual_base * 0.40
-ahv_viuda_anual = ahv_viuda_mes * 12
-ahv_huerfano_anual = ahv_huerfano_mes * 12
+ahv_viuda_anual = ahv_individual_base * 0.80 * 12
+ahv_huerfano_anual = ahv_individual_base * 0.40 * 12
 
-pk_data = DATOS_PK[nivel_pk]
-costo_plus = DATOS_PK['Plus']['costo_mensual']
-ahorro_nomina = costo_plus - pk_data['costo_mensual']
+pk_data_capital = pk_capital_meta[nivel_pk]
+pk_data_renta = pk_renta[nivel_pk]
 
-# SECCIÓN 1: ESCUDO FAMILIAR
-ingreso_viuda_total = pk_data['renta_viuda'] + ahv_viuda_anual
-ingreso_huerfano_total = pk_data['renta_huerfano'] + ahv_huerfano_anual
+# Asignación inversión privada
+pct_vt = (100 - pct_oro) / 100
+pct_oro_dec = pct_oro / 100
+aporte_vt_anual = aporte_etf * pct_vt * 12
+aporte_oro_anual = aporte_etf * pct_oro_dec * 12
+
+# ESCUDO FAMILIAR
+ingreso_viuda_total = renta_viuda + ahv_viuda_anual
+ingreso_huerfano_total = renta_huerfano + ahv_huerfano_anual
 ingreso_familiar_anual = ingreso_viuda_total + ingreso_huerfano_total
-capital_seguro = pk_data['capital_muerte'] + CAPITAL_3A_ACTUAL + (aporte_etf * 24)
+capital_seguro = capital_muerte + CAPITAL_3A_ACTUAL + (aporte_etf * 24)
 
-# SECCIÓN 2: SIMULACIÓN
+# SIMULACIÓN
 tabla_datos = []
 saldo_viac = CAPITAL_3A_ACTUAL
-saldo_vt = 0 
+saldo_vt = 0
+saldo_oro = 0
 saldo_bonos = 0
 saldo_sparkonto = 0
-aporte_etf_anual = aporte_etf * 12 
 cuentas_viac_restantes = 5
 saldo_por_cuenta_viac_ref = 0
 edad_quiebra = None
@@ -126,38 +163,39 @@ for edad in range(EDAD_ACTUAL, EDAD_FINAL + 1):
     factor_inflacion_avs = (1 + inf_rate)**pasos_bianuales
     avs_nominal_anual = ahv_pareja_anual_base * factor_inflacion_avs
     
-    if estrategia_retiro == '100% Renta': renta_pk = pk_data['renta']
+    if estrategia_retiro == '100% Renta': renta_pk = pk_data_renta
     elif estrategia_retiro == '100% Capital': renta_pk = 0
-    else: renta_pk = pk_data['renta'] / 2
+    else: renta_pk = pk_data_renta / 2
         
     ingresos_fijos = 0
 
-    # FASE 1
+    # FASE 1: ACUMULACIÓN
     if edad < EDAD_RETIRO:
         saldo_viac = (saldo_viac + APORTE_ANUAL_3A) * (1 + r_acum_anual)
-        saldo_vt = (saldo_vt + aporte_etf_anual) * (1 + r_acum_anual)
-        saldo_pk = SALDO_PK_ACTUAL + (pk_data['capital_meta'] - SALDO_PK_ACTUAL) * ((year_index + 1) / (EDAD_RETIRO - EDAD_ACTUAL))
+        saldo_vt = (saldo_vt + aporte_vt_anual) * (1 + r_acum_anual)
+        saldo_oro = (saldo_oro + aporte_oro_anual) * (1 + r_oro_anual)
+        saldo_pk = SALDO_PK_ACTUAL + (pk_data_capital - SALDO_PK_ACTUAL) * ((year_index + 1) / (EDAD_RETIRO - EDAD_ACTUAL))
         
         fila.update({
             'PATRIMONIO VIAC': saldo_viac, 'PATRIMONIO 2ND PILAR': saldo_pk, 
             'RETIRADA BRUTA VIAC': 0, 'IMPUESTO VIAC': 0, 'RETIRADA BRUTA PK': 0, 'IMPUESTO PK': 0,
-            'INYECCION A SPARKONTO': 0, 'INYECCION A BONOS': 0, 'INYECCION A VT': 0,
-            'SALDO SPARKONTO (SEGURIDAD)': 0, 'SALDO BONOS (SEGURIDAD MEDIA)': 0, 'SALDO VT (RIESGO)': saldo_vt,
+            'INYECCION A SPARKONTO': 0, 'INYECCION A BONOS': 0, 'INYECCION A VT': 0, 'INYECCION A ORO': 0,
+            'SALDO SPARKONTO': 0, 'SALDO BONOS': 0, 
+            'SALDO VT': saldo_vt, 'SALDO ORO': saldo_oro,
             'GASTO REAL ANUAL': gasto_nominal_anual, 
             'AVS ANUAL': 0, 'RENTA PK ANUAL': 0, 'TOTAL INGRESOS FIJOS': 0
         })
 
-    # FASE 2
+    # FASE 2: RETIRO
     else:
         ingresos_fijos = avs_nominal_anual + renta_pk
         dinero_entrante_neto = 0
-        impuestos_pagados = 0
         retirada_bruta_viac = 0
         impuesto_viac = 0
         retirada_bruta_pk = 0
         impuesto_pk = 0
         
-        # VIAC
+        # VIAC escalonado (5 cuentas, una por año de 65-69)
         if 65 <= edad <= 69 and cuentas_viac_restantes > 0:
             if edad == EDAD_RETIRO: saldo_por_cuenta_viac_ref = saldo_viac / 5
             monto = saldo_por_cuenta_viac_ref
@@ -171,35 +209,37 @@ for edad in range(EDAD_ACTUAL, EDAD_FINAL + 1):
             impuesto_viac = monto * (tax_rate * 0.8)
             dinero_entrante_neto += (monto - impuesto_viac)
 
-        # PK
+        # PK capital
         saldo_pk_visual = 0
         if edad == EDAD_RETIRO:
             cap_pk = 0
-            if estrategia_retiro == '100% Capital': cap_pk = pk_data['capital_meta']
-            elif estrategia_retiro == 'Mixto 50/50': cap_pk = pk_data['capital_meta'] / 2
+            if estrategia_retiro == '100% Capital': cap_pk = pk_data_capital
+            elif estrategia_retiro == 'Mixto 50/50': cap_pk = pk_data_capital / 2
             if cap_pk > 0:
                 retirada_bruta_pk = cap_pk
                 impuesto_pk = cap_pk * tax_rate
                 dinero_entrante_neto += (cap_pk - impuesto_pk)
         
         if estrategia_retiro != '100% Capital':
-            saldo_pk_visual = pk_data['capital_meta'] if estrategia_retiro == '100% Renta' else pk_data['capital_meta']/2
+            saldo_pk_visual = pk_data_capital if estrategia_retiro == '100% Renta' else pk_data_capital / 2
 
-        # CASCADA
+        # CASCADA DE CUBOS
         deficit_actual = gasto_nominal_anual - ingresos_fijos
         target_sparkonto = calcular_deficit_futuro(edad, gastos_mensuales, ahv_pareja_anual_base, renta_pk, inf_rate, 0, 3)
         target_bonos = calcular_deficit_futuro(edad, gastos_mensuales, ahv_pareja_anual_base, renta_pk, inf_rate, 3, 5)
         
         falta_sparkonto = max(0, target_sparkonto - saldo_sparkonto)
-        iny_sparkonto = 0; iny_bonos = 0; iny_vt = 0
+        iny_sparkonto = 0; iny_bonos = 0; iny_vt = 0; iny_oro = 0
         remanente = dinero_entrante_neto
         
+        # Llenar sparkonto
         if remanente > 0:
             if remanente >= falta_sparkonto:
                 iny_sparkonto = falta_sparkonto; remanente -= falta_sparkonto
             else:
                 iny_sparkonto = remanente; remanente = 0
         
+        # Llenar bonos
         falta_bonos = max(0, target_bonos - saldo_bonos)
         if remanente > 0:
             if remanente >= falta_bonos:
@@ -207,38 +247,54 @@ for edad in range(EDAD_ACTUAL, EDAD_FINAL + 1):
             else:
                 iny_bonos = remanente; remanente = 0
         
-        if remanente > 0: iny_vt = remanente
+        # Resto: dividir entre VT y Oro según proporción
+        if remanente > 0:
+            iny_vt = remanente * pct_vt
+            iny_oro = remanente * pct_oro_dec
         
         saldo_sparkonto += iny_sparkonto
         saldo_bonos += iny_bonos
         saldo_vt += iny_vt
+        saldo_oro += iny_oro
         
+        # Consumir déficit: sparkonto → bonos → oro → VT
         if deficit_actual > 0:
-            if saldo_sparkonto >= deficit_actual:
-                saldo_sparkonto -= deficit_actual
+            restante = deficit_actual
+            if saldo_sparkonto >= restante:
+                saldo_sparkonto -= restante; restante = 0
             else:
-                restante = deficit_actual - saldo_sparkonto
-                saldo_sparkonto = 0
+                restante -= saldo_sparkonto; saldo_sparkonto = 0
+            if restante > 0:
                 if saldo_bonos >= restante:
-                    saldo_bonos -= restante
+                    saldo_bonos -= restante; restante = 0
                 else:
-                    restante -= saldo_bonos
-                    saldo_bonos = 0
-                    saldo_vt -= restante
+                    restante -= saldo_bonos; saldo_bonos = 0
+            if restante > 0:
+                if saldo_oro >= restante:
+                    saldo_oro -= restante; restante = 0
+                else:
+                    restante -= saldo_oro; saldo_oro = 0
+            if restante > 0:
+                saldo_vt -= restante
         
+        # Rentabilidades
         saldo_vt *= (1 + r_ret_anual)
+        saldo_oro *= (1 + r_oro_ret_anual)
         saldo_bonos *= (1 + r_bonos_anual)
         
-        if (saldo_vt + saldo_bonos + saldo_sparkonto) < 0:
+        patrimonio_total = saldo_vt + saldo_oro + saldo_bonos + saldo_sparkonto
+        if patrimonio_total < 0:
             if edad_quiebra is None: edad_quiebra = edad
-            saldo_vt = 0; saldo_bonos = 0; saldo_sparkonto = 0
+            saldo_vt = 0; saldo_oro = 0; saldo_bonos = 0; saldo_sparkonto = 0
 
         fila.update({
             'PATRIMONIO VIAC': saldo_viac, 'PATRIMONIO 2ND PILAR': saldo_pk_visual, 
             'RETIRADA BRUTA VIAC': retirada_bruta_viac, 'IMPUESTO VIAC': impuesto_viac,
             'RETIRADA BRUTA PK': retirada_bruta_pk, 'IMPUESTO PK': impuesto_pk,
-            'INYECCION A SPARKONTO': iny_sparkonto, 'INYECCION A BONOS': iny_bonos, 'INYECCION A VT': iny_vt,
-            'SALDO SPARKONTO (SEGURIDAD)': saldo_sparkonto, 'SALDO BONOS (SEGURIDAD MEDIA)': saldo_bonos, 'SALDO VT (RIESGO)': saldo_vt,
+            'INYECCION A SPARKONTO': iny_sparkonto, 'INYECCION A BONOS': iny_bonos, 
+            'INYECCION A VT': iny_vt, 'INYECCION A ORO': iny_oro,
+            'SALDO SPARKONTO': saldo_sparkonto, 'SALDO BONOS': saldo_bonos, 
+            'SALDO VT': saldo_vt, 'SALDO ORO': saldo_oro,
             'GASTO REAL ANUAL': gasto_nominal_anual, 
             'AVS ANUAL': avs_nominal_anual, 'RENTA PK ANUAL': renta_pk, 'TOTAL INGRESOS FIJOS': ingresos_fijos
         })
@@ -247,13 +303,43 @@ for edad in range(EDAD_ACTUAL, EDAD_FINAL + 1):
 
 df = pd.DataFrame(tabla_datos)
 
-# --- DISPLAY ---
-fila_h = df[df['Edad'] == edad_herencia].iloc[0]
-herencia_val = fila_h['SALDO VT (RIESGO)'] + fila_h['SALDO BONOS (SEGURIDAD MEDIA)'] + fila_h['SALDO SPARKONTO (SEGURIDAD)'] + fila_h['PATRIMONIO VIAC']
-col_h = "#3498db" if herencia_val > 0 else "#e74c3c"
-tit_st = f"⚠️ AGOTADO A LOS {edad_quiebra}" if edad_quiebra else "✅ SOSTENIBLE (>120 AÑOS)"
-col_st = "#e74c3c" if edad_quiebra else "#27ae60"
 
+# ================================================================
+# DISPLAY
+# ================================================================
+
+# --- SECCIÓN: SALARIO Y CONTRIBUCIONES ---
+st.subheader("💰 Salario y Contribuciones PK")
+
+col_s1, col_s2, col_s3 = st.columns(3)
+with col_s1:
+    st.metric("Salario Bruto", f"{salario:,.0f} CHF")
+with col_s2:
+    st.metric("Salario Asegurado E1", f"{e1_salary:,.0f} CHF")
+with col_s3:
+    st.metric("Salario Asegurado E2", f"{e2_salary:,.0f} CHF")
+
+contrib_rows = []
+for niv in ['Standard', 'Medium', 'Plus']:
+    c = contribuciones[niv]
+    marker = " ◀" if niv == nivel_pk else ""
+    contrib_rows.append({
+        'Nivel': f"{niv}{marker}",
+        'E1 (CHF/mes)': f"{c['E1']:,.2f}",
+        'E2 (CHF/mes)': f"{c['E2']:,.2f}",
+        'CSP (CHF/mes)': f"{c['CSP']:,.2f}",
+        'TOTAL EE (CHF/mes)': f"{c['Total']:,.2f}",
+        'Capital Meta 65': f"{pk_capital_meta[niv]:,.0f}",
+        'Renta Anual 65': f"{pk_renta[niv]:,.0f}",
+    })
+df_contrib = pd.DataFrame(contrib_rows)
+st.dataframe(df_contrib, use_container_width=True, hide_index=True)
+
+if salario != SALARIO_REF:
+    st.info(f"⚠️ Capital meta y rentas escalados proporcionalmente al salario (factor {factor_salario:.3f}). Para valores exactos, consulta el Portal PK.")
+
+# --- ESCUDO FAMILIAR ---
+st.markdown("---")
 st.markdown(f"""
 <div style="background-color:#d6eaf8; padding:15px; border-radius:10px; border-left: 6px solid #3498db; margin-bottom:20px;">
     <h3 style="margin:0; color:#2c3e50;">🛡️ ESCUDO FAMILIAR (Si falleces HOY - Nivel {nivel_pk})</h3>
@@ -263,6 +349,13 @@ st.markdown(f"""
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+# --- RESULTADO JUBILACIÓN ---
+fila_h = df[df['Edad'] == edad_herencia].iloc[0]
+herencia_val = fila_h['SALDO VT'] + fila_h['SALDO ORO'] + fila_h['SALDO BONOS'] + fila_h['SALDO SPARKONTO'] + fila_h['PATRIMONIO VIAC']
+col_h = "#3498db" if herencia_val > 0 else "#e74c3c"
+tit_st = f"⚠️ AGOTADO A LOS {edad_quiebra}" if edad_quiebra else "✅ SOSTENIBLE (>120 AÑOS)"
+col_st = "#e74c3c" if edad_quiebra else "#27ae60"
 
 col1, col2 = st.columns(2)
 with col1:
@@ -280,26 +373,49 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
 
-# GRÁFICO 1
+# --- ASIGNACIÓN INVERSIÓN ---
+if pct_oro > 0:
+    st.markdown("---")
+    st.subheader("🥇 Asignación Inversión Privada")
+    col_i1, col_i2, col_i3 = st.columns(3)
+    with col_i1:
+        st.metric("Aporte Total", f"{aporte_etf:,} CHF/mes")
+    with col_i2:
+        st.metric(f"→ VT ({100-pct_oro}%)", f"{aporte_etf * pct_vt:,.0f} CHF/mes")
+    with col_i3:
+        st.metric(f"→ Oro ({pct_oro}%)", f"{aporte_etf * pct_oro_dec:,.0f} CHF/mes")
+
+# --- GRÁFICO 1: CUBOS ---
+st.markdown("---")
 fig, ax = plt.subplots(figsize=(10, 5))
-ax.stackplot(df['Edad'], 
-              df['SALDO SPARKONTO (SEGURIDAD)'], 
-              df['SALDO BONOS (SEGURIDAD MEDIA)'], 
-              df['SALDO VT (RIESGO)'], 
-              labels=['Sparkonto (Cash)', 'Bonos (5 Años)', 'VT (Crecimiento)'], 
-              colors=['#3498db', '#f1c40f', '#2ecc71'], alpha=0.8)
-total_liq = df['SALDO SPARKONTO (SEGURIDAD)'] + df['SALDO BONOS (SEGURIDAD MEDIA)'] + df['SALDO VT (RIESGO)']
+
+stack_labels = ['Sparkonto (Cash)', 'Bonos (5 Años)']
+stack_data = [df['SALDO SPARKONTO'], df['SALDO BONOS']]
+stack_colors = ['#3498db', '#f1c40f']
+
+if pct_oro > 0:
+    stack_labels.append('Oro')
+    stack_data.append(df['SALDO ORO'])
+    stack_colors.append('#DAA520')
+
+stack_labels.append('VT (Crecimiento)')
+stack_data.append(df['SALDO VT'])
+stack_colors.append('#2ecc71')
+
+ax.stackplot(df['Edad'], *stack_data, labels=stack_labels, colors=stack_colors, alpha=0.8)
+
+total_liq = df['SALDO SPARKONTO'] + df['SALDO BONOS'] + df['SALDO VT'] + df['SALDO ORO']
 ax.fill_between(df['Edad'], total_liq, total_liq + df['PATRIMONIO VIAC'], color='orange', alpha=0.3, label='VIAC (Pendiente)')
 if estrategia_retiro != '100% Capital':
     ax.plot(df['Edad'], df['PATRIMONIO 2ND PILAR'], color='navy', linestyle='--', alpha=0.4, label='Capital PK')
 ax.axvline(65, color='black', linestyle=':')
 ax.axvline(edad_herencia, color='blue', linewidth=2)
-ax.set_title("Evolución de los 3 Cubos de Dinero")
+ax.set_title("Evolución de los Cubos de Dinero")
 ax.legend(loc='upper left')
 ax.grid(True, alpha=0.3)
 st.pyplot(fig)
 
-# GRÁFICO 2
+# --- GRÁFICO 2: FLUJO DE CAJA ---
 fig2, ax2 = plt.subplots(figsize=(10, 5))
 df_ret = df[df['Edad'] >= 65]
 ingreso_tot = df_ret['TOTAL INGRESOS FIJOS']
@@ -311,11 +427,12 @@ ax2.legend()
 ax2.grid(True, alpha=0.3)
 st.pyplot(fig2)
 
-# TABLA
+# --- TABLA ---
 st.subheader("Detalle Año a Año")
 cols_show = ['Edad', 'PATRIMONIO VIAC', 
             'RETIRADA BRUTA VIAC', 'IMPUESTO VIAC', 
-            'INYECCION A SPARKONTO', 'INYECCION A BONOS', 'INYECCION A VT',
-            'SALDO SPARKONTO (SEGURIDAD)', 'SALDO BONOS (SEGURIDAD MEDIA)', 'SALDO VT (RIESGO)',
+            'INYECCION A SPARKONTO', 'INYECCION A BONOS', 'INYECCION A VT', 'INYECCION A ORO',
+            'SALDO SPARKONTO', 'SALDO BONOS', 
+            'SALDO VT', 'SALDO ORO',
             'GASTO REAL ANUAL', 'TOTAL INGRESOS FIJOS']
 st.dataframe(df[cols_show].style.format("{:,.0f}"), use_container_width=True)
