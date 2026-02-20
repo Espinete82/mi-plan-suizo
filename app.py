@@ -174,7 +174,7 @@ for edad in range(EDAD_ACTUAL, EDAD_FINAL + 1):
         saldo_viac = (saldo_viac + APORTE_ANUAL_3A) * (1 + r_acum_anual)
         saldo_vt = (saldo_vt + aporte_vt_anual) * (1 + r_acum_anual)
         saldo_oro = (saldo_oro + aporte_oro_anual) * (1 + r_oro_anual)
-        saldo_pk = SALDO_PK_ACTUAL + (pk_data_capital - SALDO_PK_ACTUAL) * ((year_index + 1) / (EDAD_RETIRO - EDAD_ACTUAL))
+        saldo_pk = SALDO_PK_ACTUAL + (pk_data_capital - SALDO_PK_ACTUAL) * (year_index / (EDAD_RETIRO - EDAD_ACTUAL))
         
         fila.update({
             'PATRIMONIO VIAC': saldo_viac, 'PATRIMONIO 2ND PILAR': saldo_pk, 
@@ -429,7 +429,7 @@ st.pyplot(fig2)
 
 # --- TABLA ---
 st.subheader("Detalle Año a Año")
-cols_show = ['Edad', 'PATRIMONIO VIAC', 
+cols_show = ['Edad', 'PATRIMONIO 2ND PILAR', 'PATRIMONIO VIAC', 
             'RETIRADA BRUTA VIAC', 'IMPUESTO VIAC', 
             'INYECCION A SPARKONTO', 'INYECCION A BONOS', 'INYECCION A VT', 'INYECCION A ORO',
             'SALDO SPARKONTO', 'SALDO BONOS', 
