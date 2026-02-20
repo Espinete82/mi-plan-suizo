@@ -715,3 +715,64 @@ with st.expander("📅 FASE 5: 70+ años — PILOTO AUTOMÁTICO"):
     - AHV viuda: ~{ahv_viuda_anual/12:,.0f} CHF/mes
     - Patrimonio en cubos: heredable al 100%
     """)
+# ================================================================
+# TABLA — DETALLE AÑO A AÑO
+# ================================================================
+st.markdown("---")
+st.subheader("Detalle Año a Año")
+
+df_tabla = df.copy()
+
+# Asegurar columnas aunque pct_oro == 0 (para que la estructura no cambie)
+for col in ["SALDO ORO", "INYECCION A ORO"]:
+    if col not in df_tabla.columns:
+        df_tabla[col] = 0.0
+
+# Patrimonio líquido (solo “cubos” + VIAC)
+df_tabla["PATRIMONIO LIQUIDO"] = (
+    df_tabla["SALDO SPARKONTO"]
+    + df_tabla["SALDO BONOS"]
+    + df_tabla["SALDO VT"]
+    + df_tabla["SALDO ORO"]
+    + df_tabla["PATRIMONIO VIAC"]
+)
+
+# Renombrar PK para claridad (igual que tu versión original)
+df_tabla = df_tabla.rename(columns={"PATRIMONIO 2ND PILAR": "PK (Capital Nocional)*"})
+
+cols_show = [
+    "Edad",
+    "PK (Capital Nocional)*",
+    "PATRIMONIO VIAC",
+    "RETIRADA BRUTA VIAC",
+    "IMPUESTO VIAC",
+    "INYECCION A SPARKONTO",
+    "INYECCION A BONOS",
+    "INYECCION A VT",
+    "INYECCION A ORO",
+    "SALDO SPARKONTO",
+    "SALDO BONOS",
+    "SALDO VT",
+    "SALDO ORO",
+    "PATRIMONIO LIQUIDO",
+    "GASTO REAL ANUAL",
+    "TOTAL INGRESOS FIJOS",
+]
+
+# Mostrar tabla con formato miles
+st.dataframe(
+    df_tabla[cols_show].style.format("{:,.0f}"),
+    use_container_width=True
+)
+
+# Botón descarga CSV (opcional, pero útil)
+csv_out = df_tabla[cols_show].to_csv(index=False).encode("utf-8")
+st.download_button(
+    "⬇️ Descargar tabla (CSV)",
+    data=csv_out,
+    file_name="plan_jubilacion_detalle.csv",
+    mime="text/csv",
+)
+
+if estrategia_retiro != "100% Capital":
+    st.caption("\\* **PK (Capital Nocional):** Este monto NO es accesible. Es el capital retenido en la Pensionskasse que genera tu renta mensual. No se puede retirar ni heredar.")
