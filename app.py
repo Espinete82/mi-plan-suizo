@@ -10,29 +10,33 @@ st.title("🇨🇭 Planificador Financiero Familiar")
 st.markdown("Simulador de Jubilación, Estrategia de Escudos y Protección Familiar.")
 
 # --- 1. DATOS FIJOS ---
+# Actualizado con extracto PK del 19.02.2026 (Ref. 28.02.2026)
 EDAD_ACTUAL = 43
 EDAD_RETIRO = 65
 EDAD_FINAL = 120
 
-# PK DATOS
+# PK DATOS — Fuente: Portal Simulation 28.02.2026 + Benefits Statement
+# Nota: renta_viuda/huerfano/capital_muerte son pre-jubilación (basados en pensión invalidez),
+#       idénticos para todos los niveles ya que dependen del salario asegurado, no del plan.
 DATOS_PK = {
     'Standard': {
-        'capital_meta': 786845, 'renta': 39960, 'costo_mensual': 634.55,
-        'renta_viuda': 27123, 'renta_huerfano': 9044, 'capital_muerte': 176597 
+        'capital_meta': 831603, 'renta': 42024, 'costo_mensual': 681.10,
+        'renta_viuda': 35424, 'renta_huerfano': 11808, 'capital_muerte': 188492
     },
     'Medium': {
-        'capital_meta': 864076, 'renta': 44004, 'costo_mensual': 889.40,
-        'renta_viuda': 29865, 'renta_huerfano': 9958, 'capital_muerte': 176597 
+        'capital_meta': 913174, 'renta': 46260, 'costo_mensual': 953.80,
+        'renta_viuda': 35424, 'renta_huerfano': 11808, 'capital_muerte': 188492
     },
     'Plus': {
-        'capital_meta': 941307, 'renta': 48060, 'costo_mensual': 1144.25,
-        'renta_viuda': 32640, 'renta_huerfano': 10884, 'capital_muerte': 176597 
+        'capital_meta': 994745, 'renta': 50508, 'costo_mensual': 1226.50,
+        'renta_viuda': 35424, 'renta_huerfano': 11808, 'capital_muerte': 188492
     }
 }
 
 # VIAC
 APORTE_ANUAL_3A = 7056
 CAPITAL_3A_ACTUAL = 3 * APORTE_ANUAL_3A # Aprox 21k
+SALDO_PK_ACTUAL = 152030  # Extracto PK 28.02.2026
 
 # --- SIDEBAR (CONTROLES) ---
 st.sidebar.header("⚙️ Configuración")
@@ -60,7 +64,7 @@ tax = st.sidebar.slider('Impuesto Retiro Capital %', 0.0, 15.0, 8.0, 0.5)
 def calcular_deficit_futuro(edad_actual, gastos_base, ahv_base, renta_pk, inflacion, anios_inicio, duracion):
     deficit_total = 0
     for i in range(anios_inicio, anios_inicio + duracion):
-        anos_desde_hoy = (edad_actual + i) - 43
+        anos_desde_hoy = (edad_actual + i) - EDAD_ACTUAL
         factor = (1 + inflacion)**anos_desde_hoy
         gasto = (gastos_base * 12) * factor
         # AVS Escalera
@@ -132,7 +136,7 @@ for edad in range(EDAD_ACTUAL, EDAD_FINAL + 1):
     if edad < EDAD_RETIRO:
         saldo_viac = (saldo_viac + APORTE_ANUAL_3A) * (1 + r_acum_anual)
         saldo_vt = (saldo_vt + aporte_etf_anual) * (1 + r_acum_anual)
-        saldo_pk = pk_data['capital_meta'] * ((year_index + 1) / (EDAD_RETIRO - EDAD_ACTUAL))
+        saldo_pk = SALDO_PK_ACTUAL + (pk_data['capital_meta'] - SALDO_PK_ACTUAL) * ((year_index + 1) / (EDAD_RETIRO - EDAD_ACTUAL))
         
         fila.update({
             'PATRIMONIO VIAC': saldo_viac, 'PATRIMONIO 2ND PILAR': saldo_pk, 
