@@ -399,9 +399,35 @@ with col2:
     st.markdown(f"""
     <div style="background-color:{col_h}; padding:20px; border-radius:10px; color:white; text-align:center;">
         <h3>{herencia_val:,.0f} CHF</h3>
-        <p>Herencia a los {edad_herencia} años</p>
+        <p>Herencia líquida a los {edad_herencia} (solo portfolio privado)</p>
     </div>
     """, unsafe_allow_html=True)
+
+# --- PROTECCIÓN MARÍA (post-65) ---
+st.markdown("---")
+renta_viuda_pk_mes = renta_pk_mensual * 0.6
+ahv_viuda_mes_val = ahv_viuda_anual / 12
+total_maria_mensual = renta_viuda_pk_mes + ahv_viuda_mes_val
+
+st.markdown(f"""
+<div style="background-color:#fdebd0; padding:15px; border-radius:10px; border-left: 6px solid #e67e22; margin-bottom:20px;">
+    <h3 style="margin:0; color:#2c3e50;">👩‍👦 PROTECCIÓN MARÍA (Si falleces a los {edad_herencia} — Estrategia: {estrategia_retiro})</h3>
+    <div style="display:flex; flex-wrap:wrap; gap:30px; margin-top:10px;">
+        <div>
+            <b>INGRESOS MENSUALES VITALICIOS:</b><br>
+            <span style="font-size:18px;">AHV Viuda: {ahv_viuda_mes_val:,.0f} CHF/mes</span><br>
+            <span style="font-size:18px;">Renta Viuda PK: {renta_viuda_pk_mes:,.0f} CHF/mes</span><br>
+            <span style="font-size:22px; color:#e67e22;"><b>Total: {total_maria_mensual:,.0f} CHF/mes</b></span>
+        </div>
+        <div>
+            <b>HERENCIA (una vez):</b><br>
+            <span style="font-size:22px; color:#27ae60;">{herencia_val:,.0f} CHF</span><br>
+            <span style="font-size:12px; color:#7f8c8d;">(Portfolio privado: VT + Bonos + Sparkonto + VIAC)<br>
+            El capital PK {'NO se hereda — genera la renta viuda arriba' if estrategia_retiro != '100% Capital' else 'ya está incluido en los cubos'}</span>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # --- ASIGNACIÓN INVERSIÓN ---
 if pct_oro > 0:
