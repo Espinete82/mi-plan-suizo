@@ -659,7 +659,7 @@ with st.expander("📅 FASE 5: 70+ años — PILOTO AUTOMÁTICO"):
 
     st.markdown(f"""
     **Para María si falleces después de los 65:**
-    {"- Renta viuda PK: " + f"{pk_data_renta * 0.6 / 12:,.0f}" + " CHF/mes (60% de tu pensión)" if estrategia_retiro != '100% Capital' else "- Sin renta viuda PK (elegiste 100% Capital) → hereda el patrimonio en los cubos"}
+    {"- Renta viuda PK: " + f"{renta_pk_mensual * 0.6:,.0f}" + " CHF/mes (60% de tu pensión)" if renta_pk_mensual > 0 else "- Sin renta viuda PK (elegiste 100% Capital) → hereda el patrimonio en los cubos"}
     - AHV viuda: ~{ahv_viuda_anual/12:,.0f} CHF/mes
     - Patrimonio en cubos: heredable al 100%
     """)
