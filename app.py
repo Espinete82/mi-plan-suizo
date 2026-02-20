@@ -13,7 +13,19 @@ st.markdown("Simulador de Jubilación, Estrategia de Escudos y Protección Famil
 EDAD_ACTUAL = 43
 EDAD_RETIRO = 65
 EDAD_FINAL = 120
-SALDO_PK_ACTUAL = 152030  # Extracto PK 28.02.2026
+# Proyección PK con datos reales del extracto (Variante A: 1.25%, Variante B: 2.25%)
+# Puntos conocidos: saldo actual + proyecciones oficiales edades 58-65
+PK_PUNTOS_A = {43: 152030, 58: 569666, 59: 605705, 60: 642196, 61: 679142, 62: 716550, 63: 754426, 64: 792775, 65: 831603}
+PK_PUNTOS_B = {43: 152030, 58: 623156, 59: 666095, 60: 710001, 61: 754895, 62: 800799, 63: 847736, 64: 895729, 65: 944801}
+
+def interpolar_pk(puntos_ref, factor_sal):
+    """Interpola cúbicamente entre puntos conocidos del PK, escalado por salario."""
+    edades = sorted(puntos_ref.keys())
+    valores = [puntos_ref[e] * factor_sal for e in edades]
+    # Interpolación cúbica para suavizar la curva
+    todas_edades = list(range(EDAD_ACTUAL, EDAD_RETIRO + 1))
+    interpolado = np.interp(todas_edades, edades, valores)
+    return {e: v for e, v in zip(todas_edades, interpolado)}
 
 # Tasas contribución EE por nivel (% del salario asegurado)
 TASAS_EE = {
@@ -43,6 +55,7 @@ st.sidebar.subheader("💰 Salario y PK")
 salario = st.sidebar.number_input('Salario Bruto Anual (CHF)', 80000, 300000, SALARIO_REF, 1000)
 tope_e1 = st.sidebar.number_input('Tope Salario E1 (CHF)', 50000, 200000, 120960, 100)
 nivel_pk = st.sidebar.selectbox('🏢 Nivel PK Empresa', ['Standard', 'Medium', 'Plus'], index=0)
+variante_pk = st.sidebar.selectbox('📊 Variante Interés PK', ['A (1.25%)', 'B (2.25%)'], index=0)
 gastos_mensuales = st.sidebar.slider('🛒 Gastos Hoy (CHF/mes)', 4000, 12000, 6700, 100)
 
 st.sidebar.markdown("---")
@@ -129,6 +142,22 @@ ahv_huerfano_anual = ahv_individual_base * 0.40 * 12
 pk_data_capital = pk_capital_meta[nivel_pk]
 pk_data_renta = pk_renta[nivel_pk]
 
+# Interpolar PK con datos reales del extracto
+pk_puntos_base = PK_PUNTOS_A if 'A' in variante_pk else PK_PUNTOS_B
+pk_interpolado = interpolar_pk(pk_puntos_base, factor_salario)
+
+# Actualizar capital meta y renta según variante elegida
+if 'B' in variante_pk:
+    # Variante B tiene capital meta mayor (944'801 vs 831'603 para Standard)
+    ratio_b_a = {
+        'Standard': 944801 / 831603,
+        'Medium': 944801 / 831603,  # Mismo ratio, solo cambia el interés
+        'Plus': 944801 / 831603,
+    }
+    pk_data_capital = pk_capital_meta[nivel_pk] * ratio_b_a[nivel_pk]
+    # Renta B para Standard: 47'736 vs 42'024
+    pk_data_renta = pk_renta[nivel_pk] * (47736 / 42024)
+
 # Asignación inversión privada
 pct_vt = (100 - pct_oro) / 100
 pct_oro_dec = pct_oro / 100
@@ -174,7 +203,7 @@ for edad in range(EDAD_ACTUAL, EDAD_FINAL + 1):
         saldo_viac = (saldo_viac + APORTE_ANUAL_3A) * (1 + r_acum_anual)
         saldo_vt = (saldo_vt + aporte_vt_anual) * (1 + r_acum_anual)
         saldo_oro = (saldo_oro + aporte_oro_anual) * (1 + r_oro_anual)
-        saldo_pk = SALDO_PK_ACTUAL + (pk_data_capital - SALDO_PK_ACTUAL) * (year_index / (EDAD_RETIRO - EDAD_ACTUAL))
+        saldo_pk = pk_interpolado.get(edad, 0)
         
         fila.update({
             'PATRIMONIO VIAC': saldo_viac, 'PATRIMONIO 2ND PILAR': saldo_pk, 
