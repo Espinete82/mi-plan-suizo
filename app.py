@@ -776,3 +776,92 @@ st.download_button(
 
 if estrategia_retiro != "100% Capital":
     st.caption("\\* **PK (Capital Nocional):** Este monto NO es accesible. Es el capital retenido en la Pensionskasse que genera tu renta mensual. No se puede retirar ni heredar.")
+# ================================================================
+# GRÁFICO 1: CUBOS (Patrimonio líquido + VIAC, PK como línea nocional)
+# ================================================================
+st.markdown("---")
+st.subheader("📈 Evolución del Patrimonio")
+
+# Asegurar columnas aunque no haya oro (para evitar errores y mantener estructura)
+df_plot = df.copy()
+for col in ["SALDO ORO"]:
+    if col not in df_plot.columns:
+        df_plot[col] = 0.0
+
+fig, ax = plt.subplots(figsize=(10, 5))
+
+# Stack líquido: Sparkonto + Bonos + (Oro opcional) + VT
+stack_labels = ["Sparkonto (Cash)", "Bonos (5 Años)"]
+stack_data = [df_plot["SALDO SPARKONTO"], df_plot["SALDO BONOS"]]
+
+if pct_oro > 0:
+    stack_labels.append("Oro")
+    stack_data.append(df_plot["SALDO ORO"])
+
+stack_labels.append("VT (Crecimiento)")
+stack_data.append(df_plot["SALDO VT"])
+
+ax.stackplot(df_plot["Edad"], *stack_data, labels=stack_labels, alpha=0.8)
+
+# VIAC encima del stack líquido
+total_liquid = np.zeros(len(df_plot))
+for s in stack_data:
+    total_liquid += s.values
+
+ax.fill_between(
+    df_plot["Edad"],
+    total_liquid,
+    total_liquid + df_plot["PATRIMONIO VIAC"].values,
+    alpha=0.3,
+    label="VIAC (Pendiente)",
+)
+
+# PK como línea separada (nocional / no líquida post-65)
+ax.plot(
+    df_plot["Edad"],
+    df_plot["PATRIMONIO 2ND PILAR"],
+    linewidth=2,
+    linestyle="--",
+    alpha=0.6,
+    label="PK (nocional, no líquido)",
+)
+
+ax.axvline(65, linestyle=":", label="Jubilación (65)")
+ax.axvline(edad_herencia, linewidth=2, label=f"Herencia ({edad_herencia})")
+
+ax.set_title("Evolución del Patrimonio Líquido")
+ax.legend(loc="upper left", fontsize=8)
+ax.grid(True, alpha=0.3)
+ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x/1000:,.0f}k"))
+ax.set_ylabel("CHF")
+
+st.pyplot(fig)
+
+# ================================================================
+# GRÁFICO 2: FLUJO DE CAJA (Ingresos vs Gastos)
+# ================================================================
+st.markdown("---")
+
+fig2, ax2 = plt.subplots(figsize=(10, 5))
+df_ret = df_plot[df_plot["Edad"] >= 65]
+
+ingreso_tot = df_ret["TOTAL INGRESOS FIJOS"]
+ax2.plot(df_ret["Edad"], df_ret["GASTO REAL ANUAL"], linewidth=3, label="Gasto Real")
+ax2.plot(df_ret["Edad"], ingreso_tot, linewidth=2, linestyle="--", label="Ingresos Fijos")
+
+ax2.fill_between(
+    df_ret["Edad"],
+    ingreso_tot,
+    df_ret["GASTO REAL ANUAL"],
+    where=(df_ret["GASTO REAL ANUAL"] > ingreso_tot),
+    alpha=0.1,
+    label="Déficit",
+)
+
+ax2.set_title("Flujo de Caja (Ingresos vs Gastos Reales)")
+ax2.legend()
+ax2.grid(True, alpha=0.3)
+ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x/1000:,.0f}k"))
+ax2.set_ylabel("CHF/año")
+
+st.pyplot(fig2)
