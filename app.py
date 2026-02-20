@@ -669,14 +669,14 @@ with st.expander("📅 FASE 5: 70+ años — PILOTO AUTOMÁTICO"):
 st.markdown("---")
 fig, ax = plt.subplots(figsize=(10, 5))
 
-# Build stack: PK as base, then liquid buckets
-stack_labels = ['2º Pilar (PK)']
-stack_data = [df['PATRIMONIO 2ND PILAR']]
-stack_colors = ['#5D6D7E']
+# PK solo como área durante acumulación (es tu dinero), línea punteada en retiro (no accesible)
+df_acum = df[df['Edad'] < 65]
+df_ret_chart = df[df['Edad'] >= 65]
 
-stack_labels.append('Sparkonto (Cash)')
-stack_data.append(df['SALDO SPARKONTO'])
-stack_colors.append('#3498db')
+# Stack líquido: Sparkonto + Bonos + Oro + VT + VIAC
+stack_labels = ['Sparkonto (Cash)']
+stack_data = [df['SALDO SPARKONTO']]
+stack_colors = ['#3498db']
 
 stack_labels.append('Bonos (5 Años)')
 stack_data.append(df['SALDO BONOS'])
@@ -693,13 +693,16 @@ stack_colors.append('#2ecc71')
 
 ax.stackplot(df['Edad'], *stack_data, labels=stack_labels, colors=stack_colors, alpha=0.8)
 
-# VIAC on top
-total_below = sum(stack_data)
-ax.fill_between(df['Edad'], total_below, total_below + df['PATRIMONIO VIAC'], color='orange', alpha=0.3, label='VIAC (Pendiente)')
+# VIAC on top of liquid stack
+total_liquid = sum(stack_data)
+ax.fill_between(df['Edad'], total_liquid, total_liquid + df['PATRIMONIO VIAC'], color='orange', alpha=0.3, label='VIAC (Pendiente)')
+
+# PK: línea separada (no apilada) — es nocional/no líquido post-retiro
+ax.plot(df['Edad'], df['PK (Capital Nocional)*'], color='#5D6D7E', linewidth=2, linestyle='--', alpha=0.6, label='PK (nocional, no líquido)')
 
 ax.axvline(65, color='black', linestyle=':', label='Jubilación (65)')
 ax.axvline(edad_herencia, color='blue', linewidth=2, label=f'Herencia ({edad_herencia})')
-ax.set_title("Evolución del Patrimonio Total")
+ax.set_title("Evolución del Patrimonio Líquido")
 ax.legend(loc='upper left', fontsize=8)
 ax.grid(True, alpha=0.3)
 
@@ -725,10 +728,21 @@ st.pyplot(fig2)
 
 # --- TABLA ---
 st.subheader("Detalle Año a Año")
-cols_show = ['Edad', 'PATRIMONIO 2ND PILAR', 'PATRIMONIO VIAC', 
+
+# Añadir columna de patrimonio total líquido
+df['PATRIMONIO LIQUIDO'] = df['SALDO SPARKONTO'] + df['SALDO BONOS'] + df['SALDO VT'] + df['SALDO ORO'] + df['PATRIMONIO VIAC']
+
+# Renombrar PK para claridad
+df = df.rename(columns={'PATRIMONIO 2ND PILAR': 'PK (Capital Nocional)*'})
+
+cols_show = ['Edad', 'PK (Capital Nocional)*', 'PATRIMONIO VIAC', 
             'RETIRADA BRUTA VIAC', 'IMPUESTO VIAC', 
             'INYECCION A SPARKONTO', 'INYECCION A BONOS', 'INYECCION A VT', 'INYECCION A ORO',
             'SALDO SPARKONTO', 'SALDO BONOS', 
             'SALDO VT', 'SALDO ORO',
+            'PATRIMONIO LIQUIDO',
             'GASTO REAL ANUAL', 'TOTAL INGRESOS FIJOS']
 st.dataframe(df[cols_show].style.format("{:,.0f}"), use_container_width=True)
+
+if estrategia_retiro != '100% Capital':
+    st.caption("\\* **PK (Capital Nocional):** Este monto NO es accesible. Es el capital retenido en la Pensionskasse que genera tu renta mensual. No se puede retirar ni heredar.")
