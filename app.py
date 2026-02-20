@@ -389,9 +389,18 @@ if pct_oro > 0:
 st.markdown("---")
 fig, ax = plt.subplots(figsize=(10, 5))
 
-stack_labels = ['Sparkonto (Cash)', 'Bonos (5 Años)']
-stack_data = [df['SALDO SPARKONTO'], df['SALDO BONOS']]
-stack_colors = ['#3498db', '#f1c40f']
+# Build stack: PK as base, then liquid buckets
+stack_labels = ['2º Pilar (PK)']
+stack_data = [df['PATRIMONIO 2ND PILAR']]
+stack_colors = ['#5D6D7E']
+
+stack_labels.append('Sparkonto (Cash)')
+stack_data.append(df['SALDO SPARKONTO'])
+stack_colors.append('#3498db')
+
+stack_labels.append('Bonos (5 Años)')
+stack_data.append(df['SALDO BONOS'])
+stack_colors.append('#f1c40f')
 
 if pct_oro > 0:
     stack_labels.append('Oro')
@@ -404,20 +413,20 @@ stack_colors.append('#2ecc71')
 
 ax.stackplot(df['Edad'], *stack_data, labels=stack_labels, colors=stack_colors, alpha=0.8)
 
-total_liq = df['SALDO SPARKONTO'] + df['SALDO BONOS'] + df['SALDO VT'] + df['SALDO ORO']
-ax.fill_between(df['Edad'], total_liq, total_liq + df['PATRIMONIO VIAC'], color='orange', alpha=0.3, label='VIAC (Pendiente)')
-# PK line: always show during accumulation
-df_acum = df[df['Edad'] < 65]
-if len(df_acum) > 0:
-    ax.plot(df_acum['Edad'], df_acum['PATRIMONIO 2ND PILAR'], color='navy', linewidth=2, alpha=0.7, label='2º Pilar (PK)')
-if estrategia_retiro != '100% Capital':
-    df_ret_pk = df[df['Edad'] >= 65]
-    ax.plot(df_ret_pk['Edad'], df_ret_pk['PATRIMONIO 2ND PILAR'], color='navy', linestyle='--', alpha=0.4)
-ax.axvline(65, color='black', linestyle=':')
-ax.axvline(edad_herencia, color='blue', linewidth=2)
-ax.set_title("Evolución de los Cubos de Dinero")
-ax.legend(loc='upper left')
+# VIAC on top
+total_below = sum(stack_data)
+ax.fill_between(df['Edad'], total_below, total_below + df['PATRIMONIO VIAC'], color='orange', alpha=0.3, label='VIAC (Pendiente)')
+
+ax.axvline(65, color='black', linestyle=':', label='Jubilación (65)')
+ax.axvline(edad_herencia, color='blue', linewidth=2, label=f'Herencia ({edad_herencia})')
+ax.set_title("Evolución del Patrimonio Total")
+ax.legend(loc='upper left', fontsize=8)
 ax.grid(True, alpha=0.3)
+
+# Y-axis in thousands
+ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x/1000:,.0f}k"))
+ax.set_ylabel("CHF")
+
 st.pyplot(fig)
 
 # --- GRÁFICO 2: FLUJO DE CAJA ---
@@ -430,6 +439,8 @@ ax2.fill_between(df_ret['Edad'], ingreso_tot, df_ret['GASTO REAL ANUAL'], where=
 ax2.set_title("Flujo de Caja (Ingresos vs Gastos Reales)")
 ax2.legend()
 ax2.grid(True, alpha=0.3)
+ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x/1000:,.0f}k"))
+ax2.set_ylabel("CHF/año")
 st.pyplot(fig2)
 
 # --- TABLA ---
