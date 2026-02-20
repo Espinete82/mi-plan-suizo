@@ -406,8 +406,13 @@ ax.stackplot(df['Edad'], *stack_data, labels=stack_labels, colors=stack_colors, 
 
 total_liq = df['SALDO SPARKONTO'] + df['SALDO BONOS'] + df['SALDO VT'] + df['SALDO ORO']
 ax.fill_between(df['Edad'], total_liq, total_liq + df['PATRIMONIO VIAC'], color='orange', alpha=0.3, label='VIAC (Pendiente)')
+# PK line: always show during accumulation
+df_acum = df[df['Edad'] < 65]
+if len(df_acum) > 0:
+    ax.plot(df_acum['Edad'], df_acum['PATRIMONIO 2ND PILAR'], color='navy', linewidth=2, alpha=0.7, label='2º Pilar (PK)')
 if estrategia_retiro != '100% Capital':
-    ax.plot(df['Edad'], df['PATRIMONIO 2ND PILAR'], color='navy', linestyle='--', alpha=0.4, label='Capital PK')
+    df_ret_pk = df[df['Edad'] >= 65]
+    ax.plot(df_ret_pk['Edad'], df_ret_pk['PATRIMONIO 2ND PILAR'], color='navy', linestyle='--', alpha=0.4)
 ax.axvline(65, color='black', linestyle=':')
 ax.axvline(edad_herencia, color='blue', linewidth=2)
 ax.set_title("Evolución de los Cubos de Dinero")
