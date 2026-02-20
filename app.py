@@ -698,7 +698,7 @@ total_liquid = sum(stack_data)
 ax.fill_between(df['Edad'], total_liquid, total_liquid + df['PATRIMONIO VIAC'], color='orange', alpha=0.3, label='VIAC (Pendiente)')
 
 # PK: línea separada (no apilada) — es nocional/no líquido post-retiro
-ax.plot(df['Edad'], df['PK (Capital Nocional)*'], color='#5D6D7E', linewidth=2, linestyle='--', alpha=0.6, label='PK (nocional, no líquido)')
+ax.plot(df['Edad'], df['PATRIMONIO 2ND PILAR'], color='#5D6D7E', linewidth=2, linestyle='--', alpha=0.6, label='PK (nocional, no líquido)')
 
 ax.axvline(65, color='black', linestyle=':', label='Jubilación (65)')
 ax.axvline(edad_herencia, color='blue', linewidth=2, label=f'Herencia ({edad_herencia})')
