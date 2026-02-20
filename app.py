@@ -238,9 +238,10 @@ for edad in range(EDAD_ACTUAL, EDAD_FINAL + 1):
             impuesto_viac = monto * (tax_rate * 0.8)
             dinero_entrante_neto += (monto - impuesto_viac)
 
-        # PK capital
+        # PK visual: mostrar capital a los 65 (antes de retirarlo), 0 después
         saldo_pk_visual = 0
         if edad == EDAD_RETIRO:
+            saldo_pk_visual = pk_data_capital  # Siempre mostrar el capital al llegar a 65
             cap_pk = 0
             if estrategia_retiro == '100% Capital': cap_pk = pk_data_capital
             elif estrategia_retiro == 'Mixto 50/50': cap_pk = pk_data_capital / 2
@@ -249,7 +250,7 @@ for edad in range(EDAD_ACTUAL, EDAD_FINAL + 1):
                 impuesto_pk = cap_pk * tax_rate
                 dinero_entrante_neto += (cap_pk - impuesto_pk)
         
-        if estrategia_retiro != '100% Capital':
+        if edad > EDAD_RETIRO and estrategia_retiro != '100% Capital':
             saldo_pk_visual = pk_data_capital if estrategia_retiro == '100% Renta' else pk_data_capital / 2
 
         # CASCADA DE CUBOS
@@ -413,6 +414,256 @@ if pct_oro > 0:
         st.metric(f"→ VT ({100-pct_oro}%)", f"{aporte_etf * pct_vt:,.0f} CHF/mes")
     with col_i3:
         st.metric(f"→ Oro ({pct_oro}%)", f"{aporte_etf * pct_oro_dec:,.0f} CHF/mes")
+
+# ================================================================
+# HOJA DE RUTA — PASO A PASO
+# ================================================================
+st.markdown("---")
+st.subheader("🗺️ Hoja de Ruta — Qué Hacer y Cuándo")
+
+# --- Calcular valores clave para la hoja de ruta ---
+fila_65 = df[df['Edad'] == 65].iloc[0]
+viac_al_65 = fila_65['PATRIMONIO VIAC'] + fila_65['RETIRADA BRUTA VIAC']  # Total VIAC antes de primera retirada
+viac_por_cuenta = viac_al_65 / 5
+vt_al_65 = df[df['Edad'] == 64].iloc[0]['SALDO VT']
+oro_al_65 = df[df['Edad'] == 64].iloc[0]['SALDO ORO']
+patrimonio_privado_65 = vt_al_65 + oro_al_65
+
+# Capital PK según estrategia
+if estrategia_retiro == '100% Capital':
+    cap_pk_bruto = pk_data_capital
+    cap_pk_impuesto = cap_pk_bruto * tax_rate
+    cap_pk_neto = cap_pk_bruto - cap_pk_impuesto
+    renta_pk_mensual = 0
+elif estrategia_retiro == 'Mixto 50/50':
+    cap_pk_bruto = pk_data_capital / 2
+    cap_pk_impuesto = cap_pk_bruto * tax_rate
+    cap_pk_neto = cap_pk_bruto - cap_pk_impuesto
+    renta_pk_mensual = pk_data_renta / 2 / 12
+else:
+    cap_pk_bruto = 0
+    cap_pk_impuesto = 0
+    cap_pk_neto = 0
+    renta_pk_mensual = pk_data_renta / 12
+
+ahv_mensual = ahv_pareja_proyectado
+ingresos_fijos_mensual = ahv_mensual + renta_pk_mensual
+
+# Déficit año 1 jubilación
+gasto_65 = fila_65['GASTO REAL ANUAL']
+ingreso_fijo_65 = fila_65['TOTAL INGRESOS FIJOS']
+deficit_65 = max(0, gasto_65 - ingreso_fijo_65)
+
+# Target cubos
+target_spark_65 = fila_65['INYECCION A SPARKONTO'] if fila_65['INYECCION A SPARKONTO'] > 0 else deficit_65 * 3
+target_bonos_65 = fila_65['INYECCION A BONOS'] if fila_65['INYECCION A BONOS'] > 0 else deficit_65 * 5
+
+# ================================================================
+# FASE 1: HOY (43) HASTA 58 — ACUMULACIÓN
+# ================================================================
+with st.expander("📅 FASE 1: HOY (43 años) → 58 años — ACUMULACIÓN", expanded=True):
+    st.markdown(f"""
+    **Objetivo:** Maximizar el crecimiento de tu patrimonio con aportes constantes.
+    
+    **Acciones mensuales automáticas:**
+    
+    | Acción | Destino | Monto |
+    |--------|---------|-------|
+    | Aporte 3er Pilar (VIAC) | 5 cuentas VIAC | {APORTE_ANUAL_3A/12:,.0f} CHF/mes |
+    | Inversión privada → VT | ETF VT / Acciones | {aporte_etf * pct_vt:,.0f} CHF/mes |
+    {"| Inversión privada → Oro | Oro (ETC/físico) | " + f"{aporte_etf * pct_oro_dec:,.0f}" + " CHF/mes |" if pct_oro > 0 else ""}
+    | Contribución PK ({nivel_pk}) | Pensionskasse | {contribuciones[nivel_pk]['Total']:,.0f} CHF/mes (automático nómina) |
+    
+    **Checklist importante:**
+    - ✅ Mantener **5 cuentas VIAC separadas** (para retiro escalonado fiscal)
+    - ✅ Revisar anualmente el nivel PK (Standard/Medium/Plus) según tu capacidad de ahorro
+    - ✅ Actualizar beneficiarios en el PK si cambia tu situación familiar
+    - ✅ Considerar **compras voluntarias** al PK (Einkauf): tienes {389530 * factor_salario:,.0f} CHF de potencial — deducible de impuestos
+    """)
+
+# ================================================================
+# FASE 2: 58-64 — PRE-JUBILACIÓN
+# ================================================================
+with st.expander("📅 FASE 2: 58 → 64 años — PREPARACIÓN PRE-JUBILACIÓN"):
+    st.markdown(f"""
+    **Objetivo:** Preparar la transición. Tu PK a los 58 será ~{pk_interpolado.get(58, 0):,.0f} CHF.
+    
+    **Acciones clave (3-5 años antes de los 65):**
+    
+    1. **Decisión PK (a los ~60-62):** Comunicar a la Pensionskasse tu elección:
+       - Tu opción actual: **{estrategia_retiro}**
+       {"- Recibirás **" + f"{cap_pk_bruto:,.0f}" + " CHF brutos** como capital" if cap_pk_bruto > 0 else ""}
+       {"- Recibirás **" + f"{renta_pk_mensual:,.0f}" + " CHF/mes** de renta vitalicia" if renta_pk_mensual > 0 else ""}
+       - ⚠️ **Esta decisión suele ser irrevocable.** Consulta con un asesor fiscal.
+    
+    2. **Últimas compras voluntarias PK (Einkauf):**
+       - Las compras en los **3 años anteriores al retiro de capital están bloqueadas** por ley
+       - Si planeas retirar capital, haz las compras **antes de los 62**
+       - Beneficio fiscal: cada CHF de Einkauf reduce tu base imponible ese año
+    
+    3. **Planificación fiscal del retiro:**
+       - En el cantón de Lucerna, el impuesto sobre retiro de capital es progresivo
+       - Retirar PK y VIAC en **años fiscales diferentes** reduce la tasa total
+       - Considera retirar el PK a los 65 y comenzar VIAC a los 65-69 (escalonado)
+    
+    4. **Revisar asignación de inversiones:**
+       - Reducir gradualmente la volatilidad del portfolio privado si lo deseas
+       - Asegurar liquidez suficiente para los primeros años de jubilación
+    """)
+
+# ================================================================
+# FASE 3: AÑO 65 — EL DÍA D
+# ================================================================
+with st.expander("📅 FASE 3: 65 años — DÍA DE LA JUBILACIÓN", expanded=True):
+    
+    st.markdown(f"### Tu estrategia: **{estrategia_retiro}**")
+    
+    # Flujo de dinero a los 65
+    st.markdown("#### 💰 Paso 1: Entradas de Capital")
+    
+    entradas_data = []
+    if cap_pk_bruto > 0:
+        entradas_data.append({
+            'Fuente': f'Pensionskasse ({estrategia_retiro})',
+            'Bruto': f"{cap_pk_bruto:,.0f}",
+            'Impuesto': f"-{cap_pk_impuesto:,.0f} ({tax*1:.1f}%)",
+            'Neto': f"{cap_pk_neto:,.0f}"
+        })
+    
+    entradas_data.append({
+        'Fuente': 'VIAC Cuenta 1 de 5 (año 65)',
+        'Bruto': f"{viac_por_cuenta:,.0f}",
+        'Impuesto': f"-{viac_por_cuenta * tax_rate * 0.8:,.0f} ({tax*0.8:.1f}%)",
+        'Neto': f"{viac_por_cuenta - viac_por_cuenta * tax_rate * 0.8:,.0f}"
+    })
+    
+    entradas_data.append({
+        'Fuente': 'Portfolio Privado (VT + Oro)',
+        'Bruto': f"{patrimonio_privado_65:,.0f}",
+        'Impuesto': 'Ya invertido',
+        'Neto': f"{patrimonio_privado_65:,.0f}"
+    })
+    
+    df_entradas = pd.DataFrame(entradas_data)
+    st.dataframe(df_entradas, use_container_width=True, hide_index=True)
+    
+    total_disponible = cap_pk_neto + (viac_por_cuenta - viac_por_cuenta * tax_rate * 0.8) + patrimonio_privado_65
+    st.markdown(f"**💵 Total disponible para invertir/distribuir: ~{total_disponible:,.0f} CHF**")
+    
+    # Ingresos fijos
+    st.markdown("#### 📊 Paso 2: Ingresos Fijos Mensuales")
+    
+    ingresos_data = []
+    ingresos_data.append({'Fuente': 'AHV/AVS (Pareja)', 'Mensual': f"{ahv_mensual:,.0f} CHF", 'Anual': f"{ahv_mensual*12:,.0f} CHF"})
+    if renta_pk_mensual > 0:
+        ingresos_data.append({'Fuente': f'Renta PK ({estrategia_retiro})', 'Mensual': f"{renta_pk_mensual:,.0f} CHF", 'Anual': f"{renta_pk_mensual*12:,.0f} CHF"})
+    ingresos_data.append({'Fuente': '**TOTAL FIJOS**', 'Mensual': f"**{ingresos_fijos_mensual:,.0f} CHF**", 'Anual': f"**{ingresos_fijos_mensual*12:,.0f} CHF**"})
+    
+    df_ingresos = pd.DataFrame(ingresos_data)
+    st.dataframe(df_ingresos, use_container_width=True, hide_index=True)
+    
+    st.markdown(f"""
+    **Gasto proyectado a los 65:** {gasto_65:,.0f} CHF/año ({gasto_65/12:,.0f} CHF/mes)  
+    **Déficit anual a cubrir con cubos:** {deficit_65:,.0f} CHF/año ({deficit_65/12:,.0f} CHF/mes)
+    """)
+    
+    # Distribución en cubos
+    st.markdown("#### 🪣 Paso 3: Distribuir el Capital en los 3 Cubos")
+    
+    st.markdown(f"""
+    | Cubo | Para qué | Horizonte | Monto Objetivo | Rentabilidad |
+    |------|----------|-----------|----------------|-------------|
+    | 🔵 **Sparkonto** | Gastos inmediatos | 0-3 años | ~{target_spark_65:,.0f} CHF | 0% (seguro) |
+    | 🟡 **Bonos** | Reserva media | 3-8 años | ~{target_bonos_65:,.0f} CHF | {r_bonos}% |
+    | 🟢 **VT{' + 🟤 Oro' if pct_oro > 0 else ''}** | Crecimiento | 8+ años | Resto (~{max(0, total_disponible - target_spark_65 - target_bonos_65):,.0f} CHF) | {r_retiro}%{f' / {r_oro_retiro}%' if pct_oro > 0 else ''} |
+    
+    **Orden de llenado:** Primero Sparkonto → después Bonos → el resto a VT{'/Oro' if pct_oro > 0 else ''}  
+    **Orden de consumo:** Gastas de Sparkonto → cuando se vacía, de Bonos → {'Oro →' if pct_oro > 0 else ''} finalmente VT
+    """)
+    
+    st.info("💡 **Acción concreta:** Abre una cuenta de ahorro (Sparkonto), una cuenta de bonos/renta fija, y mantén tu broker (VT). Transfiere el capital según los montos de arriba.")
+
+# ================================================================
+# FASE 4: 65-69 — RETIRO ESCALONADO VIAC
+# ================================================================
+with st.expander("📅 FASE 4: 65 → 69 años — RETIRO ESCALONADO VIAC"):
+    st.markdown(f"""
+    **Objetivo:** Retirar las 5 cuentas VIAC una por año para minimizar impuestos.
+    
+    | Año | Edad | Cuenta VIAC | Monto Estimado | Impuesto (~{tax*0.8:.1f}%) | Neto | Destino |
+    |-----|------|-------------|---------------|-----------|------|---------|
+    | 1 | 65 | Cuenta 1 | {viac_por_cuenta:,.0f} | {viac_por_cuenta*tax_rate*0.8:,.0f} | {viac_por_cuenta*(1-tax_rate*0.8):,.0f} | Rellenar cubos |
+    | 2 | 66 | Cuenta 2 | {viac_por_cuenta:,.0f} | {viac_por_cuenta*tax_rate*0.8:,.0f} | {viac_por_cuenta*(1-tax_rate*0.8):,.0f} | Rellenar cubos |
+    | 3 | 67 | Cuenta 3 | {viac_por_cuenta:,.0f} | {viac_por_cuenta*tax_rate*0.8:,.0f} | {viac_por_cuenta*(1-tax_rate*0.8):,.0f} | Rellenar cubos |
+    | 4 | 68 | Cuenta 4 | {viac_por_cuenta:,.0f} | {viac_por_cuenta*tax_rate*0.8:,.0f} | {viac_por_cuenta*(1-tax_rate*0.8):,.0f} | Rellenar cubos |
+    | 5 | 69 | Cuenta 5 | {viac_por_cuenta:,.0f} | {viac_por_cuenta*tax_rate*0.8:,.0f} | {viac_por_cuenta*(1-tax_rate*0.8):,.0f} | Rellenar cubos |
+    
+    **Total VIAC:** ~{viac_al_65:,.0f} CHF brutos → ~{viac_al_65*(1-tax_rate*0.8):,.0f} CHF netos
+    
+    **Regla de distribución:** Cada año que recibes VIAC:
+    1. ¿El Sparkonto tiene menos de 3 años de déficit? → Rellenar
+    2. ¿Los Bonos tienen menos de 5 años de déficit? → Rellenar
+    3. ¿Sobra? → Al cubo VT{'/Oro' if pct_oro > 0 else ''} para que siga creciendo
+    
+    ⚠️ **Importante:** No retirar más de una cuenta VIAC en el mismo año fiscal.
+    """)
+
+# ================================================================
+# FASE 5: 70+ — PILOTO AUTOMÁTICO
+# ================================================================
+with st.expander("📅 FASE 5: 70+ años — PILOTO AUTOMÁTICO"):
+    
+    # Calcular cuando se agotan los cubos
+    edades_criticas = {}
+    for _, row in df[df['Edad'] >= 70].iterrows():
+        e = int(row['Edad'])
+        if row['SALDO SPARKONTO'] <= 0 and 'sparkonto' not in edades_criticas:
+            edades_criticas['sparkonto'] = e
+        if row['SALDO BONOS'] <= 0 and 'bonos' not in edades_criticas:
+            edades_criticas['bonos'] = e
+        if pct_oro > 0 and row['SALDO ORO'] <= 0 and 'oro' not in edades_criticas:
+            edades_criticas['oro'] = e
+        if row['SALDO VT'] <= 0 and 'vt' not in edades_criticas:
+            edades_criticas['vt'] = e
+    
+    st.markdown(f"""
+    **Objetivo:** Vivir del sistema de cubos, rebalanceando una vez al año.
+    
+    **Rutina anual (enero de cada año):**
+    1. Revisar saldo del Sparkonto: ¿cubre 2-3 años de gastos?
+    2. Si no → vender Bonos para rellenar
+    3. Si Bonos también bajos → vender {'Oro, luego ' if pct_oro > 0 else ''}VT para rellenar Bonos + Sparkonto
+    4. Cobrar AHV ({ahv_mensual:,.0f}/mes) {"+ renta PK (" + f"{renta_pk_mensual:,.0f}" + "/mes)" if renta_pk_mensual > 0 else ""} automáticamente
+    
+    **Proyección de cubos:**
+    """)
+    
+    timeline_items = []
+    if 'sparkonto' in edades_criticas:
+        timeline_items.append(f"- 🔵 Sparkonto se agota a los **~{edades_criticas['sparkonto']}** → empiezas a usar Bonos")
+    if 'bonos' in edades_criticas:
+        timeline_items.append(f"- 🟡 Bonos se agotan a los **~{edades_criticas['bonos']}** → empiezas a usar {'Oro' if pct_oro > 0 else 'VT'}")
+    if pct_oro > 0 and 'oro' in edades_criticas:
+        timeline_items.append(f"- 🟤 Oro se agota a los **~{edades_criticas['oro']}** → empiezas a usar VT")
+    if 'vt' in edades_criticas:
+        timeline_items.append(f"- 🟢 VT se agota a los **~{edades_criticas['vt']}** → ⚠️ solo queda AHV")
+    elif edad_quiebra is None:
+        timeline_items.append(f"- 🟢 VT **nunca se agota** → patrimonio sostenible de por vida ✅")
+    
+    st.markdown('\n'.join(timeline_items))
+    
+    if edad_quiebra:
+        st.error(f"⚠️ Con los parámetros actuales, el patrimonio se agota a los {edad_quiebra} años. Considera aumentar el ahorro, reducir gastos, o elegir renta PK parcial.")
+    else:
+        st.success(f"✅ El plan es sostenible hasta los 120+. Herencia estimada a los {edad_herencia}: {herencia_val:,.0f} CHF")
+
+    st.markdown(f"""
+    **Para María si falleces después de los 65:**
+    {"- Renta viuda PK: " + f"{pk_data_renta * 0.6 / 12:,.0f}" + " CHF/mes (60% de tu pensión)" if estrategia_retiro != '100% Capital' else "- Sin renta viuda PK (elegiste 100% Capital) → hereda el patrimonio en los cubos"}
+    - AHV viuda: ~{ahv_viuda_anual/12:,.0f} CHF/mes
+    - Patrimonio en cubos: heredable al 100%
+    """)
+
 
 # --- GRÁFICO 1: CUBOS ---
 st.markdown("---")
